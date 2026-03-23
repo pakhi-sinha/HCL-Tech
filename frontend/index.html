@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-LLM Review Aggregator</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Fira+Code:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="background-orbs">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="orb orb-3"></div>
+    </div>
+
+    <header>
+        <h1 class="gradient-text">✨ Multi-LLM Code Review</h1>
+        <p>AI Consensus powered by Gemini, ChatGPT, DeepSeek & Grok</p>
+    </header>
+
+    <main class="dashboard">
+        <section class="panel editor-panel glass">
+            <div class="panel-header">
+                <h2>Source Code</h2>
+            </div>
+            <textarea id="code-input" spellcheck="false" placeholder="def my_function():\n    # Paste your code here to be reviewed by 4 AI Agents simultaneously..."></textarea>
+            <button id="review-btn" class="glow-on-hover">Run Aggregated Review</button>
+        </section>
+
+        <section class="panel results-panel glass">
+            <div id="loader" class="hidden">
+                <div class="spinner"></div>
+                <p class="loader-text">Dispatching to <span class="highlight">ChatGPT</span>, <span class="highlight">DeepSeek</span>, and <span class="highlight">Grok</span>...<br>Aggregating synthesis via <span class="gemini-highlight">Gemini</span>...</p>
+            </div>
+            
+            <div id="results" class="hidden">
+                <div class="score-container">
+                    <div class="score-circle">
+                        <span id="confidence-score">95</span><span style="font-size: 0.5em">%</span>
+                    </div>
+                    <h3>Confidence Score</h3>
+                </div>
+
+                <div class="issues-container">
+                    <div class="issue-box bugs-box">
+                        <h3>🐞 Bugs Detected</h3>
+                        <ul id="bugs-list"></ul>
+                    </div>
+                    <div class="issue-box flaws-box">
+                        <h3>🔐 Security Flaws</h3>
+                        <ul id="flaws-list"></ul>
+                    </div>
+                </div>
+
+                <div class="refactored-container">
+                    <h3>💡 Refactored Code</h3>
+                    <pre><code id="refactored-code"></code></pre>
+                </div>
+            </div>
+            
+            <div id="empty-state" class="empty-state">
+                <p>Submit code on the left to see the multi-agent consensus report.</p>
+            </div>
+        </section>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+</html>
