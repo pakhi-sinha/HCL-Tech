@@ -15,7 +15,7 @@ payload = json.dumps({"code_snippet": snippet}).encode('utf-8')
 headers = {'Content-Type': 'application/json'}
 req = urllib.request.Request(url, data=payload, headers=headers)
 
-print("Sending request to Multi-LLM Aggregator...")
+print("Sending request to Gemini Code Review Agent...")
 try:
     with urllib.request.urlopen(req, timeout=60) as response:
         print(f"Status Code: {response.getcode()}")
