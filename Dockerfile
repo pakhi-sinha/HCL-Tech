@@ -6,8 +6,9 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy main API file
+# Copy main API file and frontend UI folder
 COPY main.py .
+COPY frontend/ frontend/
 
 EXPOSE 8000
 
