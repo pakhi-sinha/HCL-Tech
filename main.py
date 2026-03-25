@@ -64,6 +64,9 @@ def extract_json(text: str) -> List[dict]:
 
 PROMPT = """
 Analyze this code for Bugs, Security (OWASP Top 10), and Code Quality.
+CRITICAL RULE: If the input is just plain English, a conversational sentence, a single word, or clearly NOT programming code, you must reject it by returning exactly this array:
+[{"type": "Bug", "file_path": "N/A", "line": 0, "description": "Invalid Input: This does not look like programming code. Please submit a valid code snippet.", "suggestion_code": ""}]
+
 Return ONLY a valid JSON array of objects. Schema for each object:
 {
     "type": "Bug" or "Security" or "Quality",
@@ -72,7 +75,7 @@ Return ONLY a valid JSON array of objects. Schema for each object:
     "description": "Short explanation",
     "suggestion_code": "The repaired line(s) of code for replacement"
 }
-If there are no actionable issues, return [].
+If there are no actionable issues in VALID CODE, return [].
 Code:
 """
 
@@ -120,7 +123,17 @@ class ReviewRequest(BaseModel):
 @app.post("/review")
 async def review_code(req: ReviewRequest):
     """Direct code review: sends code to Gemini and returns structured results."""
-    code = req.code_snippet
+    code = req.code_snippet.strip()
+
+    # Instant fail-safe for non-code inputs like "hi" or short English phrases
+    if len(code) < 10 or (" " not in code and "\n" not in code):
+        return {
+            "confidence_score": 0,
+            "merged_bugs": ["❌ Invalid Input: This input is too short or simple to be programming code. Please submit a valid Python/JS/Java snippet."],
+            "security_flaws": [],
+            "refactored_code": "",
+            "raw_findings": []
+        }
 
     findings = await call_gemini(code)
     
