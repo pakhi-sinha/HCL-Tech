@@ -4,6 +4,9 @@ import subprocess
 import urllib.request
 import urllib.error
 import json
+from dotenv import load_dotenv
+
+load_dotenv()
 
 def get_repo():
     try:
@@ -39,7 +42,7 @@ payload = {
     "active": True,
     "events": ["pull_request"],
     "config": {
-        "url": "https://young-friends-judge.loca.lt/webhook",
+        "url": "https://fast-tigers-hammer.loca.lt/webhook",
         "content_type": "json",
         "insecure_ssl": "0"
     }

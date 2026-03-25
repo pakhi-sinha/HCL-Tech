@@ -4,29 +4,52 @@ import re
 import asyncio
 import httpx
 from fastapi import FastAPI, Request, BackgroundTasks, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from typing import List
+from pydantic import BaseModel
+from dotenv import load_dotenv
 
-app = FastAPI(title="PS-01 Multi-LLM Code Review Assistant")
+load_dotenv()
+
+app = FastAPI(title="PS-01 Gemini Code Review Agent")
+
+# CORS Middleware — allows frontend to call API
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/")
 async def root():
-    return {"status": "PS-01 Multi-LLM Code Review Assistant is ONLINE and waiting for webhooks!"}
+    return {"status": "PS-01 Gemini Code Review Agent is ONLINE and waiting for webhooks!"}
+
+# Serve frontend UI
+@app.get("/ui")
+async def serve_ui():
+    return FileResponse(os.path.join(os.path.dirname(__file__), "frontend", "index.html"))
+
+# Mount static files for CSS/JS
+app.mount("/frontend", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "frontend")), name="frontend")
 
 # Environment Variables
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
 
 async def fetch_pr_diff(repo: str, pr_num: int) -> str:
     url = f"https://api.github.com/repos/{repo}/pulls/{pr_num}"
-    headers = {
-        "Authorization": f"Bearer {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github.v3.diff"
-    }
-    async with httpx.AsyncClient() as client:
+    headers = {"Accept": "application/vnd.github.v3.diff"}
+    if GITHUB_TOKEN:
+        headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
+        
+    async with httpx.AsyncClient(follow_redirects=True) as client:
         resp = await client.get(url, headers=headers)
         resp.raise_for_status()
+        print(f"Fetched PR #{pr_num} diff perfectly ({len(resp.text)} chars). Dispatching to Gemini...")
         return resp.text
 
 def extract_json(text: str) -> List[dict]:
@@ -40,10 +63,24 @@ def extract_json(text: str) -> List[dict]:
     return []
 
 PROMPT = """
+Analyze this code for Bugs, Security (OWASP Top 10), and Code Quality.
+Return ONLY a valid JSON array of objects. Schema for each object:
+{
+    "type": "Bug" or "Security" or "Quality",
+    "file_path": "path/to/file",
+    "line": <integer of the problematic line>,
+    "description": "Short explanation",
+    "suggestion_code": "The repaired line(s) of code for replacement"
+}
+If there are no actionable issues, return [].
+Code:
+"""
+
+DIFF_PROMPT = """
 Analyze this unified diff for Bugs, Security (OWASP Top 10), and Code Quality.
 Return ONLY a valid JSON array of objects. Schema for each object:
 {
-    "type": "Bug",
+    "type": "Bug" or "Security" or "Quality",
     "file_path": "path/to/file",
     "line": <integer of the changed line>,
     "description": "Short explanation",
@@ -53,71 +90,77 @@ If there are no actionable issues, return [].
 Diff:
 """
 
-async def call_openai(diff: str) -> List[dict]:
-    url = "https://api.openai.com/v1/chat/completions"
-    headers = {"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"}
+async def call_gemini(code: str, prompt: str = None) -> List[dict]:
+    if not GEMINI_API_KEY:
+        print("[ERROR] GEMINI_API_KEY is missing!")
+        return []
+    prompt = prompt or PROMPT
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
     payload = {
-        "model": "gpt-4o",
-        "messages": [{"role": "system", "content": "Return ONLY JSON."}, {"role": "user", "content": PROMPT + diff}],
-        "temperature": 0.1
-    }
-    async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(url, headers=headers, json=payload)
-        resp.raise_for_status()
-        return extract_json(resp.json()["choices"][0]["message"]["content"])
-
-async def call_deepseek(diff: str) -> List[dict]:
-    url = "https://api.deepseek.com/chat/completions"
-    headers = {"Authorization": f"Bearer {DEEPSEEK_API_KEY}", "Content-Type": "application/json"}
-    payload = {
-        "model": "deepseek-coder",
-        "messages": [{"role": "system", "content": "Return ONLY JSON."}, {"role": "user", "content": PROMPT + diff}],
-        "temperature": 0.1
-    }
-    async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(url, headers=headers, json=payload)
-        if resp.status_code != 200: return []
-        return extract_json(resp.json()["choices"][0]["message"]["content"])
-
-async def call_gemini(diff: str) -> List[dict]:
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key={GEMINI_API_KEY}"
-    payload = {
-        "contents": [{"parts": [{"text": PROMPT + diff}]}],
+        "contents": [{"parts": [{"text": prompt + code}]}],
         "generationConfig": {"temperature": 0.1}
     }
     async with httpx.AsyncClient(timeout=60) as client:
         resp = await client.post(url, json=payload)
-        if resp.status_code != 200: return []
-        return extract_json(resp.json()["candidates"][0]["content"]["parts"][0]["text"])
+        if resp.status_code != 200: 
+            print(f"[ERROR] Gemini API returned {resp.status_code}: {resp.text}")
+            return []
+        
+        try:
+            return extract_json(resp.json()["candidates"][0]["content"]["parts"][0]["text"])
+        except (KeyError, IndexError) as e:
+            print(f"[ERROR] Failed to parse Gemini response: {e}")
+            return []
 
-def aggregate_findings(lists: List[List[dict]]) -> tuple[List[dict], int]:
-    # Rule-based Aggregation Engine
-    all_findings = []
-    for l in lists: 
-        all_findings.extend(l)
-    
-    unique_findings = {}
-    overlap_count = 0
-    
-    for f in all_findings:
-        key = f"{f.get('file_path')}_{f.get('line')}_{f.get('type')}"
-        if key in unique_findings:
-            overlap_count += 1
-            unique_findings[key]["consensus"] += 1
-        else:
-            f["consensus"] = 1
-            unique_findings[key] = f
-            
-    base_score = 75
-    confidence = min(100, base_score + (overlap_count * 5)) if unique_findings else 100
-    
-    return list(unique_findings.values()), confidence
+# ==================== /review ENDPOINT (for frontend & test_client) ====================
 
-async def post_github_comments(repo: str, pr_num: int, commit_sha: str, findings: List[dict], score: int):
+class ReviewRequest(BaseModel):
+    code_snippet: str
+
+@app.post("/review")
+async def review_code(req: ReviewRequest):
+    """Direct code review: sends code to Gemini and returns structured results."""
+    code = req.code_snippet
+
+    findings = await call_gemini(code)
+    
+    # Calculate a simple mock score based on number of findings
+    score = max(10, 100 - (len(findings) * 5)) if findings else 100
+
+    # Separate by type for frontend
+    bugs = [f"{f.get('description')}" for f in findings if f.get("type") in ("Bug", "Quality")]
+    security = [f"{f.get('description')}" for f in findings if f.get("type") == "Security"]
+
+    # Build refactored code block
+    refactored_lines = [f.get("suggestion_code", "") for f in findings if f.get("suggestion_code")]
+    refactored_code = "\n".join(refactored_lines) if refactored_lines else ""
+
+    return {
+        "confidence_score": score,
+        "merged_bugs": bugs,
+        "security_flaws": security,
+        "refactored_code": refactored_code,
+        "raw_findings": findings
+    }
+
+# ==================== /webhook ENDPOINT (for GitHub) ====================
+
+async def post_github_comments(repo: str, pr_num: int, commit_sha: str, findings: List[dict]):
+    # Fallback print if no write-access token explicitly provided
+    if not GITHUB_TOKEN:
+        print("\n" + "="*60)
+        print(f"[No GITHUB_TOKEN] PS-01 Gemini Review Results for PR #{pr_num}:")
+        for f in findings:
+            print(f"- [{f.get('type')}] {f.get('file_path')}:{f.get('line')} -> {f.get('description')}")
+            if f.get('suggestion_code'):
+                print(f"  Suggested Fix:\n{f.get('suggestion_code')}")
+        print("="*60 + "\n")
+        return
+
     # 1. Post General Summary Comment
     issue_url = f"https://api.github.com/repos/{repo}/issues/{pr_num}/comments"
     headers = {"Authorization": f"Bearer {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
-    summary_body = f"### 🤖 PS-01 Multi-LLM Review \n\n**Confidence Score:** {score}%\n\nI have aggregated results from Gemini, OpenAI, and DeepSeek. Found {len(findings)} actionable item(s)."
+    summary_body = f"### 🤖 PS-01 Gemini Code Review \n\nI have analyzed the code. Found {len(findings)} actionable item(s)."
     
     async with httpx.AsyncClient() as client:
         await client.post(issue_url, headers=headers, json={"body": summary_body})
@@ -143,25 +186,24 @@ async def post_github_comments(repo: str, pr_num: int, commit_sha: str, findings
                 pass
 
 async def process_pr(repo: str, pr_num: int, commit_sha: str):
-    diff = await fetch_pr_diff(repo, pr_num)
-    if not diff: return
+    try:
+        diff = await fetch_pr_diff(repo, pr_num)
+        if not diff: return
+    except Exception as e:
+        print("\n" + "="*60)
+        print(f"[CRITICAL ERROR] Failed to fetch PR code diff for {repo}#{pr_num}!")
+        print(f"Error Details: {str(e)}")
+        print("CAUSE: If this repository is PRIVATE, GitHub blocks access without a token and returns a 401/404.")
+        print("FIX: Provide a valid GITHUB_TOKEN or ensure the repo is public.")
+        print("="*60 + "\n")
+        return
     
-    # Concurrent Multi-LLM Processing
-    results = await asyncio.gather(
-        call_openai(diff),
-        call_deepseek(diff),
-        call_gemini(diff),
-        return_exceptions=True
-    )
-    
-    valid_results = [r for r in results if isinstance(r, list)]
-    
-    # Rule-Based Aggregation
-    merged_findings, score = aggregate_findings(valid_results)
+    # Single LLM Processing
+    findings = await call_gemini(diff, DIFF_PROMPT)
     
     # Actionable Posting
-    if merged_findings:
-        await post_github_comments(repo, pr_num, commit_sha, merged_findings, score)
+    if findings:
+        await post_github_comments(repo, pr_num, commit_sha, findings)
 
 @app.post("/webhook")
 async def github_webhook(request: Request, bg_tasks: BackgroundTasks):

@@ -16,7 +16,7 @@ reviewBtn.addEventListener('click', async () => {
     resultsBox.classList.add('hidden');
     loader.classList.remove('hidden');
     reviewBtn.disabled = true;
-    reviewBtn.innerText = "Analyzing Multi-Agent Consensus...";
+    reviewBtn.innerText = "Analyzing with Gemini...";
 
     try {
         const response = await fetch("http://localhost:8000/review", {
@@ -88,6 +88,6 @@ reviewBtn.addEventListener('click', async () => {
         emptyState.classList.remove('hidden');
     } finally {
         reviewBtn.disabled = false;
-        reviewBtn.innerText = "Run Aggregated Review";
+        reviewBtn.innerText = "Run Gemini Review";
     }
 });

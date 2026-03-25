@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Multi-LLM Review Aggregator</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Gemini Code Review Agent</title>
+    <link rel="stylesheet" href="/frontend/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Fira+Code:wght@400;600&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -15,8 +15,8 @@
     </div>
 
     <header>
-        <h1 class="gradient-text">✨ Multi-LLM Code Review</h1>
-        <p>AI Consensus powered by Gemini, ChatGPT, DeepSeek & Grok</p>
+        <h1 class="gradient-text">✨ Gemini Code Review</h1>
+        <p>AI Code Analysis powered by Google Gemini 2.5</p>
     </header>
 
     <main class="dashboard">
@@ -24,14 +24,14 @@
             <div class="panel-header">
                 <h2>Source Code</h2>
             </div>
-            <textarea id="code-input" spellcheck="false" placeholder="def my_function():\n    # Paste your code here to be reviewed by 4 AI Agents simultaneously..."></textarea>
-            <button id="review-btn" class="glow-on-hover">Run Aggregated Review</button>
+            <textarea id="code-input" spellcheck="false" placeholder="def my_function():\n    # Paste your code here to be reviewed by Gemini 2.5..."></textarea>
+            <button id="review-btn" class="glow-on-hover">Run Gemini Review</button>
         </section>
 
         <section class="panel results-panel glass">
             <div id="loader" class="hidden">
                 <div class="spinner"></div>
-                <p class="loader-text">Dispatching to <span class="highlight">ChatGPT</span>, <span class="highlight">DeepSeek</span>, and <span class="highlight">Grok</span>...<br>Aggregating synthesis via <span class="gemini-highlight">Gemini</span>...</p>
+                <p class="loader-text">Analyzing your code with <span class="gemini-highlight">Gemini 2.5 Flash</span>...</p>
             </div>
             
             <div id="results" class="hidden">
@@ -60,11 +60,11 @@
             </div>
             
             <div id="empty-state" class="empty-state">
-                <p>Submit code on the left to see the multi-agent consensus report.</p>
+                <p>Submit code on the left to see the Gemini analysis report.</p>
             </div>
         </section>
     </main>
 
-    <script src="script.js"></script>
+    <script src="/frontend/script.js"></script>
 </body>
 </html>
